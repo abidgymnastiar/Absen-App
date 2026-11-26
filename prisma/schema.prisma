@@ -1,0 +1,39 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model DataGroup {
+  id             BigInt          @id @default(autoincrement())
+  groupName      String          @map("group_name") @db.VarChar(150)
+  createdAt      DateTime?       @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt      DateTime?       @default(now()) @map("updated_at") @db.Timestamp(0)
+  attendanceLogs AttendanceLog[]
+
+  @@map("data_groups")
+}
+
+model AttendanceLog {
+  id             BigInt    @id @default(autoincrement())
+  dataGroupId    BigInt    @map("data_group_id")
+  dataGroup      DataGroup @relation(fields: [dataGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  site           String?   @db.VarChar(150)
+  department     String?   @db.VarChar(100)
+  employeeId     String?   @map("employee_id") @db.VarChar(50)
+  employeeName   String?   @map("employee_name") @db.VarChar(150)
+  position       String?   @db.VarChar(150)
+  attendanceType String?   @map("attendance_type") @db.VarChar(50)
+  attendanceDate DateTime? @map("attendance_date") @db.Date
+  scanTime       DateTime? @map("scan_time") @db.Time(0)
+  shiftCode      String?   @map("shift_code") @db.VarChar(100)
+  description    String?   @db.Text
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamp(0)
+
+  @@index([dataGroupId], map: "idx_attendance_group")
+  @@index([employeeId, attendanceDate], map: "idx_attendance_employee_date")
+  @@map("attendance_logs")
+}
