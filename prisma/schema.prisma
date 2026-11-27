@@ -9,12 +9,14 @@ datasource db {
 }
 
 model DataGroup {
-  id             BigInt          @id @default(autoincrement())
-  groupName      String          @map("group_name") @db.VarChar(150)
-  createdAt      DateTime?       @default(now()) @map("created_at") @db.Timestamp(0)
-  updatedAt      DateTime?       @default(now()) @map("updated_at") @db.Timestamp(0)
-  attendanceLogs AttendanceLog[]
+  id                    BigInt                 @id @default(autoincrement())
+  groupName             String                 @map("group_name") @db.VarChar(150)
+  createdAt             DateTime?              @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt             DateTime?              @default(now()) @map("updated_at") @db.Timestamp(0)
+  attendanceLogs        AttendanceLog[]
   attendanceCorrections AttendanceCorrection[]
+
+  attendanceHolidaySchedules AttendanceHolidaySchedule[]
 
   @@map("data_groups")
 }
@@ -48,12 +50,22 @@ enum AttendanceStatus {
 }
 
 model AttendanceCorrection {
-  dataGroupId BigInt    @map("data_group_id")
-  dataGroup   DataGroup @relation(fields: [dataGroupId], references: [id], onDelete: Cascade)
-  employeeId  String    @map("employee_id") @db.VarChar(50)
-  date        DateTime  @map("attendance_date") @db.Date
+  dataGroupId BigInt           @map("data_group_id")
+  dataGroup   DataGroup        @relation(fields: [dataGroupId], references: [id], onDelete: Cascade)
+  employeeId  String           @map("employee_id") @db.VarChar(50)
+  date        DateTime         @map("attendance_date") @db.Date
   status      AttendanceStatus
 
   @@id([dataGroupId, employeeId, date])
   @@map("attendance_corrections")
+}
+
+model AttendanceHolidaySchedule {
+  dataGroupId BigInt    @map("data_group_id")
+  dataGroup   DataGroup @relation(fields: [dataGroupId], references: [id], onDelete: Cascade)
+  employeeId  String    @map("employee_id") @db.VarChar(50)
+  weekday     Int       @db.UnsignedTinyInt
+
+  @@id([dataGroupId, employeeId])
+  @@map("attendance_holiday_schedules")
 }

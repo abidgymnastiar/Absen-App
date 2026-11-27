@@ -1,8 +1,28 @@
 export const dailyIndicators = {
-  L: { status: 'Libur', label: 'Libur', color: 'bg-yellow-100 text-yellow-900' },
-  I: { status: 'Izin', label: 'Izin', color: 'bg-orange-100 text-orange-900' },
-  H: { status: 'Hadir', label: 'Masuk', color: 'bg-green-100 text-green-900' },
-  OFF: { status: 'Tidak hadir', label: 'Tidak masuk', color: 'bg-red-100 text-red-900' },
+  L: {
+    status: 'Libur',
+    label: 'Libur',
+    color: 'bg-yellow-100 text-yellow-900',
+    excelFill: 'FFFEF9C2',
+  },
+  I: {
+    status: 'Izin',
+    label: 'Izin',
+    color: 'bg-orange-100 text-orange-900',
+    excelFill: 'FFFFEDD4',
+  },
+  H: {
+    status: 'Hadir',
+    label: 'Masuk',
+    color: 'bg-green-100 text-green-900',
+    excelFill: 'FFDCFCE7',
+  },
+  OFF: {
+    status: 'Tidak hadir',
+    label: 'Tidak masuk',
+    color: 'bg-red-100 text-red-900',
+    excelFill: 'FFFFE2E2',
+  },
 } as const;
 
 export type AttendanceStatus = keyof typeof dailyIndicators;
@@ -25,6 +45,12 @@ export const fields = [
 ] as const;
 
 export type Attendance = { id: string } & Record<(typeof fields)[number]['key'], string>;
+
+export type AttendanceHolidaySchedule = { employeeId: string; weekday: number };
+
+export function isScheduledHoliday(date: string, weekday: number | undefined) {
+  return weekday !== undefined && new Date(date).getUTCDay() === weekday;
+}
 
 export function attendanceDayKey(employeeId: string, date: string) {
   return JSON.stringify([employeeId, date]);

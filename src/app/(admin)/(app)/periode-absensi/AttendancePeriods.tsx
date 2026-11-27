@@ -89,7 +89,11 @@ export default function AttendancePeriods({ periods }: { periods: Period[] }) {
       }
       dialog.current?.close();
     } catch {
-      setError('Perubahan periode gagal disimpan. Coba lagi.');
+      setError(
+        selected.mode === 'delete'
+          ? 'Periode gagal dihapus. Coba lagi.'
+          : 'Perubahan periode gagal disimpan. Coba lagi.'
+      );
     } finally {
       setPending(false);
     }
@@ -245,7 +249,10 @@ export default function AttendancePeriods({ periods }: { periods: Period[] }) {
             />
           </label>
           {selected?.mode === 'delete' && (
-            <p>Hapus periode {selected.period.name} beserta semua data absensinya?</p>
+            <p>
+              Hapus periode <strong>{selected.period.name}</strong> beserta semua catatan scan,
+              koreksi absensi, dan jadwal liburnya?
+            </p>
           )}
           {error && (
             <p role="alert" className="text-sm text-danger">

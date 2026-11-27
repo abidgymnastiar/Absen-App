@@ -54,7 +54,7 @@ function excelTime(value: unknown) {
 }
 
 function readAttendance(buffer: ArrayBuffer) {
-  const workbook = read(buffer, { type: 'array', sheets: 0, cellNF: true });
+  const workbook = read(buffer, { type: 'array', sheets: 0, cellNF: true, cellDates: false });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   if (!sheet?.['!ref']) throw new Error('Sheet pertama kosong.');
   const range = utils.decode_range(sheet['!ref']);
@@ -89,20 +89,24 @@ function readAttendance(buffer: ArrayBuffer) {
     if (fields.every(({ key }) => String(get(key) ?? '').trim() === '')) return [];
     try {
       const data = attendanceInput(key => {
-        const value = get(key);
+        const indexInSheet = column(key);
+        const cell =
+          indexInSheet < 0
+            ? undefined
+            : sheet[
+                utils.encode_cell({
+                  r: range.s.r + headerIndex + index + 1,
+                  c: range.s.c + indexInSheet,
+                })
+              ];
+        // Read the original date/time serial before sheet_to_json applies timezone conversion.
+        const value = key === 'date' || key === 'time' ? (cell?.v ?? get(key)) : get(key);
         if (key === 'date') return excelDate(value, date1904);
         if (key === 'time') return excelTime(value);
         if (key === 'employeeId') {
           if (typeof value === 'number' && !Number.isSafeInteger(value)) {
             throw new Error('Simpan ID Pegawai sebagai teks di Excel agar digitnya tetap utuh.');
           }
-          const cell =
-            sheet[
-              utils.encode_cell({
-                r: range.s.r + headerIndex + index + 1,
-                c: range.s.c + column(key),
-              })
-            ];
           if (typeof value === 'number' && /^0+$/.test(cell?.z ?? '')) return cell.w ?? value;
         }
         return value;

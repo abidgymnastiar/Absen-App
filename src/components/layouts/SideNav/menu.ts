@@ -17,6 +17,7 @@ import {
   LuShieldCheck,
   LuShoppingBag,
   LuSquareUserRound,
+  LuWallet,
 } from 'react-icons/lu';
 
 export type MenuItemType = {
@@ -68,6 +69,12 @@ export const menuItemsData: MenuItemType[] = [
     label: 'Periode Absensi',
     icon: LuCalendar1,
     href: '/periode-absensi',
+  },
+  {
+    key: 'Payroll',
+    label: 'Payroll',
+    icon: LuWallet,
+    href: '/payroll',
   },
   // {
   //   key: 'Chat',

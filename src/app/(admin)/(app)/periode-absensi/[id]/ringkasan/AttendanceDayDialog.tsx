@@ -11,6 +11,7 @@ export default function AttendanceDayDialog({
   date,
   type,
   correction,
+  scheduledHoliday,
   records,
   onClose,
 }: {
@@ -20,6 +21,7 @@ export default function AttendanceDayDialog({
   date: string;
   type?: string;
   correction?: AttendanceStatus;
+  scheduledHoliday: boolean;
   records: Attendance[];
   onClose: () => void;
 }) {
@@ -125,7 +127,7 @@ export default function AttendanceDayDialog({
                   type="button"
                   className={`btn btn-sm ${color} ${correction === code ? 'ring-2 ring-primary ring-offset-1' : ''}`}
                   aria-pressed={correction === code}
-                  disabled={pending || !employeeId || records.length === 0}
+                  disabled={pending || !employeeId}
                   onClick={() => changeStatus(code)}
                 >
                   {code} · {label}
@@ -138,7 +140,7 @@ export default function AttendanceDayDialog({
                 disabled={pending || correction === undefined}
                 onClick={() => changeStatus(null)}
               >
-                Otomatis dari scan
+                {scheduledHoliday ? 'Otomatis · Libur terjadwal' : 'Otomatis dari scan'}
               </button>
             </div>
             {error && (
@@ -198,7 +200,7 @@ export default function AttendanceDayDialog({
                 {records.length === 0 && (
                   <tr>
                     <td colSpan={5} className="px-4 py-3">
-                      Catatan tidak tersedia.
+                      Belum ada catatan scan pada tanggal ini.
                     </td>
                   </tr>
                 )}

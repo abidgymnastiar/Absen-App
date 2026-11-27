@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { Prisma } from '@/generated/prisma/client';
 import { prisma } from '@/lib/prisma';
 import { databaseId } from './db';
 import { dailyIndicators, type AttendanceStatus } from './[id]/attendanceData';
@@ -46,6 +47,7 @@ export async function renamePeriod(periodId: string, name: string) {
 export async function deletePeriod(periodId: string) {
   const id = databaseId(periodId);
   if (!id) throw new Error('Periode tidak ditemukan.');
+  // The period's foreign keys cascade to daily corrections and weekly holiday schedules.
   await prisma.$transaction([
     prisma.attendanceLog.deleteMany({ where: { dataGroupId: id } }),
     prisma.dataGroup.delete({ where: { id } }),
@@ -59,33 +61,144 @@ export async function saveAttendanceCorrection(
   date: string,
   status: AttendanceStatus | null
 ) {
+  await updateAttendanceCorrections(periodId, [{ employeeId, date }], status);
+}
+
+type AttendanceDay = { employeeId: string; date: string };
+
+export async function saveAttendanceHolidays(
+  periodId: string,
+  schedules: { employeeId: string; weekday: number | null }[]
+) {
   const dataGroupId = databaseId(periodId);
-  const attendanceDate = new Date(date);
   if (
     !dataGroupId ||
-    !employeeId.trim() ||
-    employeeId.length > 50 ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
-    Number.isNaN(attendanceDate.getTime()) ||
-    attendanceDate.toISOString().slice(0, 10) !== date ||
+    !Array.isArray(schedules) ||
+    !schedules.length ||
+    schedules.some(
+      entry =>
+        !entry ||
+        typeof entry.employeeId !== 'string' ||
+        !entry.employeeId.trim() ||
+        entry.employeeId.length > 50 ||
+        (entry.weekday !== null &&
+          (!Number.isInteger(entry.weekday) || entry.weekday < 0 || entry.weekday > 6))
+    )
+  ) {
+    throw new Error('Jadwal libur tidak valid.');
+  }
+
+  const updates = new Map(schedules.map(({ employeeId, weekday }) => [employeeId, weekday]));
+  const employees = await prisma.attendanceLog.findMany({
+    where: { dataGroupId, employeeId: { in: [...updates.keys()] } },
+    distinct: ['employeeId'],
+    select: { employeeId: true },
+  });
+  const validIds = new Set(employees.map(employee => employee.employeeId));
+  if ([...updates.keys()].some(id => !validIds.has(id))) {
+    throw new Error('Karyawan tidak termasuk dalam periode absensi.');
+  }
+
+  const removals: string[] = [];
+  const values: Prisma.Sql[] = [];
+  for (const [employeeId, weekday] of updates) {
+    if (weekday === null) removals.push(employeeId);
+    else values.push(Prisma.sql`(${dataGroupId}, ${employeeId}, ${weekday})`);
+  }
+
+  await prisma.$transaction(async transaction => {
+    if (removals.length) {
+      await transaction.attendanceHolidaySchedule.deleteMany({
+        where: { dataGroupId, employeeId: { in: removals } },
+      });
+    }
+    if (values.length) {
+      await transaction.$executeRaw`
+        INSERT INTO attendance_holiday_schedules (data_group_id, employee_id, weekday)
+        VALUES ${Prisma.join(values)}
+        ON DUPLICATE KEY UPDATE weekday = VALUES(weekday)
+      `;
+    }
+  });
+  revalidatePath('/periode-absensi', 'layout');
+}
+
+async function updateAttendanceCorrections(
+  periodId: string,
+  days: AttendanceDay[],
+  status: AttendanceStatus | null
+) {
+  const dataGroupId = databaseId(periodId);
+  if (
+    !dataGroupId ||
+    !Array.isArray(days) ||
+    !days.length ||
     (status !== null &&
       (typeof status !== 'string' ||
         !Object.prototype.hasOwnProperty.call(dailyIndicators, status)))
-  )
+  ) {
     throw new Error('Koreksi absensi tidak valid.');
+  }
 
-  const key = { dataGroupId, employeeId, date: attendanceDate };
+  const entries = days.map(day => {
+    const { employeeId, date } = day ?? {};
+    if (
+      typeof employeeId !== 'string' ||
+      !employeeId.trim() ||
+      employeeId.length > 50 ||
+      typeof date !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(date)
+    ) {
+      throw new Error('Koreksi absensi tidak valid.');
+    }
+    const attendanceDate = new Date(date);
+    if (
+      Number.isNaN(attendanceDate.getTime()) ||
+      attendanceDate.toISOString().slice(0, 10) !== date
+    ) {
+      throw new Error('Tanggal absensi tidak valid.');
+    }
+    return { employeeId, date, attendanceDate };
+  });
+  const ids = [...new Set(entries.map(({ employeeId }) => employeeId))];
   if (status === null) {
-    await prisma.attendanceCorrection.deleteMany({ where: key });
-  } else {
-    const record = await prisma.attendanceLog.findFirst({
-      where: { dataGroupId, employeeId, attendanceDate },
-      select: { id: true },
+    const [{ employeeId, attendanceDate }] = entries;
+    await prisma.attendanceCorrection.deleteMany({
+      where: { dataGroupId, employeeId, date: attendanceDate },
     });
-    if (!record) throw new Error('Catatan absensi tidak ditemukan.');
+  } else {
+    const [employees, range] = await Promise.all([
+      prisma.attendanceLog.findMany({
+        where: { dataGroupId, employeeId: { in: ids } },
+        distinct: ['employeeId'],
+        select: { employeeId: true },
+      }),
+      prisma.attendanceLog.aggregate({
+        where: { dataGroupId },
+        _min: { attendanceDate: true },
+        _max: { attendanceDate: true },
+      }),
+    ]);
+    const validIds = new Set(employees.map(employee => employee.employeeId));
+    const first = range._min.attendanceDate;
+    const last = range._max.attendanceDate;
+    if (
+      !first ||
+      !last ||
+      entries.some(
+        ({ employeeId, attendanceDate }) =>
+          !validIds.has(employeeId) || attendanceDate < first || attendanceDate > last
+      )
+    ) {
+      throw new Error('Karyawan atau tanggal tidak termasuk dalam periode absensi.');
+    }
+
+    const values = entries.map(
+      ({ employeeId, date }) => Prisma.sql`(${dataGroupId}, ${employeeId}, ${date}, ${status})`
+    );
     await prisma.$executeRaw`
       INSERT INTO attendance_corrections (data_group_id, employee_id, attendance_date, status)
-      VALUES (${dataGroupId}, ${employeeId}, ${date}, ${status})
+      VALUES ${Prisma.join(values)}
       ON DUPLICATE KEY UPDATE status = ${status}
     `;
   }

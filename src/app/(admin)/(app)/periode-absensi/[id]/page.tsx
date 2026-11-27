@@ -5,7 +5,12 @@ import { LuArrowLeft } from 'react-icons/lu';
 import { getPeriod } from '../db';
 import AttendanceRecords from './AttendanceRecords';
 import AttendanceSummaryCards from './AttendanceSummaryCards';
-import { attendanceDayKey, getAttendanceScans, getDuplicateAttendance } from './attendanceData';
+import {
+  attendanceDayKey,
+  getAttendanceScans,
+  getDuplicateAttendance,
+  isScheduledHoliday,
+} from './attendanceData';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,8 +18,11 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const { id } = await params;
   const data = await getPeriod(id);
   if (!data) notFound();
-  const { period, records, corrections } = data;
+  const { period, records, corrections, holidaySchedules } = data;
   const { duplicateDayCount } = getDuplicateAttendance(records);
+  const holidayByEmployee = new Map(
+    holidaySchedules.map(({ employeeId, weekday }) => [employeeId, weekday])
+  );
   const employees = new Set<string>();
   const scans = getAttendanceScans(records);
   const presentEmployees = new Set<string>();
@@ -26,8 +34,21 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     if (!record.employeeId) continue;
     const day = scans.get(record.employeeId)?.get(record.date);
     const correction = corrections[attendanceDayKey(record.employeeId, record.date)];
-    if (correction === undefined ? day?.masuk && day.keluar : correction === 'H') {
+    if (
+      correction === undefined &&
+      day?.masuk &&
+      day.keluar &&
+      !isScheduledHoliday(record.date, holidayByEmployee.get(record.employeeId))
+    ) {
       presentEmployees.add(record.employeeId);
+    }
+  }
+
+  for (const [key, correction] of Object.entries(corrections)) {
+    if (correction !== 'H') continue;
+    const [employeeId, date] = JSON.parse(key) as [string, string];
+    if (employees.has(employeeId) && date >= period.startDate && date <= period.endDate) {
+      presentEmployees.add(employeeId);
     }
   }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { LuSearch } from 'react-icons/lu';
+import { LuDownload, LuSearch } from 'react-icons/lu';
 import type { Period } from '../../periods';
 import AttendanceSummaryCards from '../AttendanceSummaryCards';
 import {
@@ -11,9 +11,13 @@ import {
   type AttendanceStatus,
   getAttendanceScans,
   getDuplicateAttendance,
+  isScheduledHoliday,
+  type AttendanceHolidaySchedule,
   type Attendance,
 } from '../attendanceData';
 import AttendanceDayDialog from './AttendanceDayDialog';
+import AttendanceHolidayDialog from './AttendanceHolidayDialog';
+import { exportAttendance } from './exportAttendance';
 
 const recapColumns = [
   { label: 'Hadir', statuses: ['Hadir'] },
@@ -37,11 +41,18 @@ export default function AttendanceSummary({
   period,
   records,
   corrections,
+  holidaySchedules,
 }: {
   period: Period;
   records: Attendance[];
   corrections: Record<string, AttendanceStatus>;
+  holidaySchedules: AttendanceHolidaySchedule[];
 }) {
+  const [holidayOpen, setHolidayOpen] = useState(false);
+  const [holidayMessage, setHolidayMessage] = useState('');
+  const holidayButton = useRef<HTMLButtonElement>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [showDaily, setShowDaily] = useState(false);
   const [query, setQuery] = useState('');
   const [selection, setSelection] = useState<DaySelection | null>(null);
@@ -67,7 +78,15 @@ export default function AttendanceSummary({
     }
   }
 
-  const roster = new Map<string, { name: string; position: string; days: Map<string, string> }>();
+  const roster = new Map<
+    string,
+    {
+      name: string;
+      position: string;
+      days: Map<string, string>;
+      automaticDays: Map<string, string>;
+    }
+  >();
   const dateSet = new Set(dates);
   const { byEmployee: duplicatesByEmployee, duplicateDayCount } = getDuplicateAttendance(
     records,
@@ -81,6 +100,7 @@ export default function AttendanceSummary({
       name: record.employeeName,
       position: record.position,
       days: new Map<string, string>(),
+      automaticDays: new Map<string, string>(),
     };
     if (!employee.position) employee.position = record.position;
     roster.set(record.employeeId, employee);
@@ -104,14 +124,36 @@ export default function AttendanceSummary({
       else if (isAbsent) status = 'Tidak hadir';
       else if (type === 'l' || type === 'libur') status = 'Libur';
       else if (type === 'i' || type === 'izin') status = 'Izin';
-      const correction = corrections[attendanceDayKey(record.employeeId, record.date)];
-      if (correction !== undefined) status = dailyIndicators[correction].status;
+      if (type || !employee.automaticDays.has(record.date)) {
+        employee.automaticDays.set(record.date, status);
+      }
       if (type || !employee.days.has(record.date)) employee.days.set(record.date, status);
       loggedDates.add(record.date);
       scanCount++;
     }
   }
 
+  const holidayByEmployee = new Map(
+    holidaySchedules.map(({ employeeId, weekday }) => [employeeId, weekday])
+  );
+  const effectiveCorrections = { ...corrections };
+  for (const [employeeId, weekday] of holidayByEmployee) {
+    if (!roster.has(employeeId)) continue;
+    for (const date of dates) {
+      if (isScheduledHoliday(date, weekday)) {
+        const key = attendanceDayKey(employeeId, date);
+        effectiveCorrections[key] ??= 'L';
+      }
+    }
+  }
+
+  for (const [key, correction] of Object.entries(effectiveCorrections)) {
+    const [employeeId, date] = JSON.parse(key) as [string, string];
+    if (dateSet.has(date))
+      roster.get(employeeId)?.days.set(date, dailyIndicators[correction].status);
+  }
+
+  const holidayEmployees = [...roster].filter(([id]) => id.trim());
   const employees = [...roster].filter(([id, employee]) =>
     `${id} ${employee.name}`.toLowerCase().includes(query.trim().toLowerCase())
   );
@@ -123,6 +165,18 @@ export default function AttendanceSummary({
   const visibleDates = showDaily
     ? dates.map(date => ({ date, isSunday: new Date(date).getUTCDay() === 0 }))
     : [];
+
+  async function downloadExcel() {
+    setExporting(true);
+    setExportError('');
+    try {
+      await exportAttendance(period.name, dates, employees, effectiveCorrections);
+    } catch {
+      setExportError('Ekspor Excel gagal. Coba lagi.');
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <>
@@ -183,6 +237,38 @@ export default function AttendanceSummary({
           >
             Rincian harian
           </button>
+          <button
+            type="button"
+            className="btn btn-sm border border-default-200"
+            disabled={exporting || dates.length === 0 || employees.length === 0}
+            onClick={downloadExcel}
+          >
+            <LuDownload className="size-4" aria-hidden="true" />
+            {exporting ? 'Mengekspor…' : 'Ekspor Excel'}
+          </button>
+          <button
+            ref={holidayButton}
+            type="button"
+            className="btn btn-sm border border-default-200"
+            aria-haspopup="dialog"
+            disabled={!period.startDate || !holidayEmployees.length}
+            onClick={() => {
+              setHolidayMessage('');
+              setHolidayOpen(true);
+            }}
+          >
+            List Libur
+          </button>
+          {holidayMessage && (
+            <p role="status" className="text-sm text-success">
+              {holidayMessage}
+            </p>
+          )}
+          {exportError && (
+            <p role="alert" className="text-sm text-danger">
+              {exportError}
+            </p>
+          )}
         </div>
         <div
           className="max-h-[65vh] overflow-auto"
@@ -250,7 +336,8 @@ export default function AttendanceSummary({
                       const indicator = dailyIndicatorEntries.find(
                         ([, indicator]) => indicator.status === status
                       );
-                      const hasCorrection = corrections[attendanceDayKey(id, date)] !== undefined;
+                      const hasCorrection =
+                        effectiveCorrections[attendanceDayKey(id, date)] !== undefined;
                       const duplicates = hasCorrection
                         ? undefined
                         : duplicatesByEmployee.get(id)?.get(date);
@@ -259,12 +346,12 @@ export default function AttendanceSummary({
                           key={date}
                           className={`px-3.5 py-3 text-center ${isSunday ? 'bg-warning/10' : ''}`}
                         >
-                          {status !== undefined ? (
+                          {id ? (
                             <button
                               type="button"
                               className="cursor-pointer rounded px-1 py-0.5 text-default-700 hover:bg-default-100 hover:underline focus-visible:outline-2 focus-visible:outline-primary"
                               aria-haspopup="dialog"
-                              aria-label={`Edit absensi ${employee.name} pada ${date}, ${status || 'catatan tanpa jenis'}`}
+                              aria-label={`Edit absensi ${employee.name} pada ${date}, ${status || 'Belum tercatat'}`}
                               onClick={event => {
                                 editButton.current = event.currentTarget;
                                 setSelection({ employeeId: id, employeeName: employee.name, date });
@@ -345,6 +432,18 @@ export default function AttendanceSummary({
           )}
         </div>
       </div>
+      {holidayOpen && (
+        <AttendanceHolidayDialog
+          period={period}
+          employees={holidayEmployees}
+          holidayByEmployee={holidayByEmployee}
+          onSaved={setHolidayMessage}
+          onClose={() => {
+            setHolidayOpen(false);
+            holidayButton.current?.focus();
+          }}
+        />
+      )}
       {selection && (
         <AttendanceDayDialog
           periodId={period.id}
@@ -353,6 +452,10 @@ export default function AttendanceSummary({
           date={selection.date}
           type={selection.type}
           correction={corrections[attendanceDayKey(selection.employeeId, selection.date)]}
+          scheduledHoliday={isScheduledHoliday(
+            selection.date,
+            holidayByEmployee.get(selection.employeeId)
+          )}
           records={records.filter(
             record =>
               record.employeeId === selection.employeeId &&

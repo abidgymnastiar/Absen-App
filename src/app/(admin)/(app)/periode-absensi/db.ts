@@ -81,7 +81,8 @@ export async function getPeriod(id: string) {
   const group = await prisma.dataGroup.findUnique({
     where: { id: groupId },
     include: {
-      attendanceCorrections: true,
+      attendanceHolidaySchedules: { select: { employeeId: true, weekday: true } },
+      attendanceCorrections: { select: { employeeId: true, date: true, status: true } },
       attendanceLogs: { orderBy: [{ attendanceDate: 'asc' }, { scanTime: 'asc' }, { id: 'asc' }] },
     },
   });
@@ -90,6 +91,7 @@ export async function getPeriod(id: string) {
   return {
     period: toPeriod(group, dated[0]?.attendanceDate ?? null, dated.at(-1)?.attendanceDate ?? null),
     records: group.attendanceLogs.map(toAttendance),
+    holidaySchedules: group.attendanceHolidaySchedules,
     corrections: Object.fromEntries(
       group.attendanceCorrections.map(({ employeeId, date, status }) => [
         attendanceDayKey(employeeId, date.toISOString().slice(0, 10)),

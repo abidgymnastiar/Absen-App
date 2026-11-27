@@ -11,7 +11,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const { id } = await params;
   const data = await getPeriod(id);
   if (!data) notFound();
-  const { period, records, corrections } = data;
+  const { period, records, corrections, holidaySchedules } = data;
 
   return (
     <main>
@@ -32,6 +32,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         period={period}
         records={records}
         corrections={corrections}
+        holidaySchedules={holidaySchedules}
       />
     </main>
   );
