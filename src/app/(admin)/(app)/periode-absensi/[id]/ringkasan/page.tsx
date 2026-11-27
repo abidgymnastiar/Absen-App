@@ -2,7 +2,7 @@ import PageBreadcrumb from '@/components/PageBreadcrumb';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { LuArrowLeft } from 'react-icons/lu';
-import { getPeriod } from '../../db';
+import { getAttendanceOvertimes, getPeriod } from '../../db';
 import AttendanceSummary from './AttendanceSummary';
 
 export const dynamic = 'force-dynamic';
@@ -12,6 +12,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const data = await getPeriod(id);
   if (!data) notFound();
   const { period, records, corrections, holidaySchedules } = data;
+
+  const overtimeEntries = await getAttendanceOvertimes(BigInt(period.id));
 
   return (
     <main>
@@ -33,6 +35,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         records={records}
         corrections={corrections}
         holidaySchedules={holidaySchedules}
+        overtimeEntries={overtimeEntries}
       />
     </main>
   );

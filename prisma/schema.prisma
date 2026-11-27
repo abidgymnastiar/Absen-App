@@ -17,6 +17,9 @@ model DataGroup {
   attendanceCorrections AttendanceCorrection[]
 
   attendanceHolidaySchedules AttendanceHolidaySchedule[]
+  attendanceOvertimes        AttendanceOvertime[]
+
+  payrollDraft PayrollDraft?
 
   @@map("data_groups")
 }
@@ -68,4 +71,30 @@ model AttendanceHolidaySchedule {
 
   @@id([dataGroupId, employeeId])
   @@map("attendance_holiday_schedules")
+}
+
+enum AttendanceOvertimeType {
+  L
+  LB
+}
+
+model AttendanceOvertime {
+  dataGroupId BigInt                 @map("data_group_id")
+  dataGroup   DataGroup              @relation(fields: [dataGroupId], references: [id], onDelete: Cascade)
+  employeeId  String                 @map("employee_id") @db.VarChar(50)
+  date        DateTime               @map("attendance_date") @db.Date
+  type        AttendanceOvertimeType @map("overtime_type")
+  minutes     Int                    @db.UnsignedSmallInt
+
+  @@id([dataGroupId, employeeId, date, type])
+  @@map("attendance_overtimes")
+}
+
+model PayrollDraft {
+  dataGroupId BigInt    @id @map("data_group_id")
+  dataGroup   DataGroup @relation(fields: [dataGroupId], references: [id], onDelete: Cascade)
+  config      Json
+  version     Int       @default(1)
+
+  @@map("payroll_drafts")
 }

@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { databaseId } from './db';
 import { dailyIndicators, type AttendanceStatus } from './[id]/attendanceData';
 import { attendanceInput } from './attendanceInput';
+import type { AttendanceOvertime } from './overtime';
 
 export async function saveAttendance(periodId: string, recordId: string | null, form: FormData) {
   const dataGroupId = databaseId(periodId);
@@ -47,7 +48,7 @@ export async function renamePeriod(periodId: string, name: string) {
 export async function deletePeriod(periodId: string) {
   const id = databaseId(periodId);
   if (!id) throw new Error('Periode tidak ditemukan.');
-  // The period's foreign keys cascade to daily corrections and weekly holiday schedules.
+  // The period's foreign keys cascade to corrections, holiday schedules, and overtime.
   await prisma.$transaction([
     prisma.attendanceLog.deleteMany({ where: { dataGroupId: id } }),
     prisma.dataGroup.delete({ where: { id } }),
@@ -202,5 +203,78 @@ async function updateAttendanceCorrections(
       ON DUPLICATE KEY UPDATE status = ${status}
     `;
   }
+  revalidatePath('/periode-absensi', 'layout');
+}
+
+export async function saveAttendanceOvertime(
+  periodId: string,
+  input: { date: string; entries: Omit<AttendanceOvertime, 'date'>[] }
+) {
+  const dataGroupId = databaseId(periodId);
+  const { date, entries } = input ?? {};
+  if (
+    !dataGroupId ||
+    typeof date !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+    !Array.isArray(entries) ||
+    !entries.length ||
+    entries.some(
+      entry =>
+        !entry ||
+        typeof entry.employeeId !== 'string' ||
+        !entry.employeeId.trim() ||
+        entry.employeeId.length > 50 ||
+        (entry.type !== 'L' && entry.type !== 'LB') ||
+        !Number.isInteger(entry.minutes) ||
+        entry.minutes < 1 ||
+        entry.minutes > 1440
+    )
+  ) {
+    throw new Error('Data lembur tidak valid.');
+  }
+  const attendanceDate = new Date(date);
+  if (
+    Number.isNaN(attendanceDate.getTime()) ||
+    attendanceDate.toISOString().slice(0, 10) !== date
+  ) {
+    throw new Error('Tanggal lembur tidak valid.');
+  }
+
+  const ids = [...new Set(entries.map(entry => entry.employeeId))];
+  if (ids.length !== entries.length) throw new Error('Pegawai tercatat lebih dari sekali.');
+  const [employees, range] = await Promise.all([
+    prisma.attendanceLog.findMany({
+      where: { dataGroupId, employeeId: { in: ids } },
+      distinct: ['employeeId'],
+      select: { employeeId: true },
+    }),
+    prisma.attendanceLog.aggregate({
+      where: { dataGroupId },
+      _min: { attendanceDate: true },
+      _max: { attendanceDate: true },
+    }),
+  ]);
+  const first = range._min.attendanceDate;
+  const last = range._max.attendanceDate;
+  const validIds = new Set(employees.map(employee => employee.employeeId));
+  if (
+    !ids.every(id => validIds.has(id)) ||
+    !first ||
+    !last ||
+    attendanceDate < first ||
+    attendanceDate > last
+  ) {
+    throw new Error('Karyawan atau tanggal tidak termasuk dalam periode absensi.');
+  }
+
+  const values = entries.map(
+    ({ employeeId, type, minutes }) =>
+      Prisma.sql`(${dataGroupId}, ${employeeId}, ${date}, ${type}, ${minutes})`
+  );
+  await prisma.$executeRaw`
+    INSERT INTO attendance_overtimes (data_group_id, employee_id, attendance_date, overtime_type, minutes)
+    VALUES ${Prisma.join(values)}
+    ON DUPLICATE KEY UPDATE minutes = VALUES(minutes)
+  `;
   revalidatePath('/periode-absensi', 'layout');
 }

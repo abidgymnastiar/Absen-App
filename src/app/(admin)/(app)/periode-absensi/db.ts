@@ -100,3 +100,11 @@ export async function getPeriod(id: string) {
     ),
   };
 }
+
+export async function getAttendanceOvertimes(dataGroupId: bigint) {
+  const entries = await prisma.attendanceOvertime.findMany({
+    where: { dataGroupId },
+    select: { employeeId: true, date: true, type: true, minutes: true },
+  });
+  return entries.map(entry => ({ ...entry, date: entry.date.toISOString().slice(0, 10) }));
+}

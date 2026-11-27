@@ -60,8 +60,8 @@ export const menuItemsData: MenuItemType[] = [
     ],
   },
   {
-    key: 'Apps',
-    label: 'Apps',
+    key: 'Absensi & Payroll',
+    label: 'Absensi & Payroll',
     isTitle: true,
   },
   {
@@ -75,6 +75,11 @@ export const menuItemsData: MenuItemType[] = [
     label: 'Payroll',
     icon: LuWallet,
     href: '/payroll',
+  },
+  {
+    key: 'Template',
+    label: 'Template',
+    isTitle: true,
   },
   // {
   //   key: 'Chat',

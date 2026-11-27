@@ -3,6 +3,7 @@ import { read, SSF, utils } from 'xlsx';
 import { prisma } from '@/lib/prisma';
 import { attendanceInput } from '../attendanceInput';
 import { fields } from '../[id]/attendanceData';
+import { databaseId } from '../db';
 
 const aliases = {
   employeeId: ['employeeid', 'empid', 'idkaryawan', 'idpegawai', 'nik', 'pin', 'idnumber'],
@@ -123,15 +124,37 @@ function readAttendance(buffer: ArrayBuffer) {
   });
 }
 
+function scanKey(scan: {
+  employeeId: string | null;
+  attendanceDate: Date | null;
+  scanTime: Date | null;
+  attendanceType: string | null;
+}) {
+  return JSON.stringify([
+    scan.employeeId?.trim() ?? '',
+    scan.attendanceDate?.toISOString().slice(0, 10) ?? '',
+    scan.scanTime?.toISOString().slice(11, 19) ?? '',
+    scan.attendanceType?.trim().toLowerCase() ?? '',
+  ]);
+}
+
 export async function POST(request: Request) {
   let groupName: string;
+  let destinationId: bigint | null = null;
   let logs: ReturnType<typeof readAttendance>;
   try {
     const form = await request.formData();
     groupName = String(form.get('periodName') ?? '').trim();
     const file = form.get('file');
-    if (!groupName || groupName.length > 150)
+    const mode = form.get('mode') ?? 'new';
+    if (mode === 'append') {
+      destinationId = databaseId(String(form.get('periodId') ?? ''));
+      if (!destinationId) throw new Error('Pilih periode tujuan.');
+    } else if (mode !== 'new') {
+      throw new Error('Tujuan impor tidak valid.');
+    } else if (!groupName || groupName.length > 150) {
       throw new Error('Masukkan nama periode maksimal 150 karakter.');
+    }
     if (!(file instanceof File) || !/\.(xlsx|xls)$/i.test(file.name) || !file.size)
       throw new Error('Pilih file Excel .xlsx atau .xls yang berisi data.');
     if (file.size > 10 * 1024 * 1024) throw new Error('Ukuran file Excel maksimal 10 MB.');
@@ -152,22 +175,61 @@ export async function POST(request: Request) {
   }
 
   try {
-    const group = await prisma.$transaction(
+    const result = await prisma.$transaction(
       async transaction => {
-        const dataGroup = await transaction.dataGroup.create({ data: { groupName } });
-        for (let offset = 0; offset < logs.length; offset += 1000) {
+        let dataGroupId: bigint;
+        let newLogs = logs;
+        let newEmployeeCount = new Set(logs.map(log => log.employeeId)).size;
+        if (destinationId !== null) {
+          // Serialize uploads into the same period so retries cannot insert the same scan twice.
+          const groups = await transaction.$queryRaw<{ id: bigint }[]>`
+            SELECT id FROM data_groups WHERE id = ${destinationId} FOR UPDATE
+          `;
+          if (!groups.length) return null;
+          dataGroupId = destinationId;
+          const existing = await transaction.attendanceLog.findMany({
+            where: { dataGroupId },
+            select: {
+              employeeId: true,
+              attendanceDate: true,
+              scanTime: true,
+              attendanceType: true,
+            },
+          });
+          const employeeIds = new Set(existing.map(log => log.employeeId));
+          const scanned = new Set(existing.map(scanKey));
+          newLogs = logs.filter(log => {
+            const key = scanKey(log);
+            if (scanned.has(key)) return false;
+            scanned.add(key);
+            return true;
+          });
+          newEmployeeCount = new Set(
+            newLogs.filter(log => !employeeIds.has(log.employeeId)).map(log => log.employeeId)
+          ).size;
+        } else {
+          const group = await transaction.dataGroup.create({ data: { groupName } });
+          dataGroupId = group.id;
+        }
+
+        for (let offset = 0; offset < newLogs.length; offset += 1000) {
           await transaction.attendanceLog.createMany({
-            data: logs
-              .slice(offset, offset + 1000)
-              .map(log => ({ ...log, dataGroupId: dataGroup.id })),
+            data: newLogs.slice(offset, offset + 1000).map(log => ({ ...log, dataGroupId })),
           });
         }
-        return dataGroup;
+        return {
+          id: String(dataGroupId),
+          count: newLogs.length,
+          skipped: logs.length - newLogs.length,
+          newEmployeeCount,
+        };
       },
       { timeout: 30_000 }
     );
+    if (!result)
+      return Response.json({ error: 'Periode tujuan tidak ditemukan.' }, { status: 404 });
     revalidatePath('/periode-absensi', 'layout');
-    return Response.json({ id: String(group.id), count: logs.length }, { status: 201 });
+    return Response.json(result, { status: destinationId === null ? 201 : 200 });
   } catch (error) {
     console.error('Gagal menyimpan impor absensi', error);
     return Response.json({ error: 'Data absensi gagal disimpan.' }, { status: 500 });

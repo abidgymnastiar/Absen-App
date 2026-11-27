@@ -1,6 +1,7 @@
 import PageBreadcrumb from '@/components/PageBreadcrumb';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { LuInfo } from 'react-icons/lu';
 import { getPeriods } from '../periode-absensi/db';
 
 export const metadata: Metadata = { title: 'Payroll' };
@@ -44,7 +45,7 @@ export default async function Page() {
                     Status absensi
                   </th>
                   <th scope="col" className="px-3.5 py-3 text-end">
-                    Ringkasan
+                    Payroll
                   </th>
                 </tr>
               </thead>
@@ -66,11 +67,12 @@ export default async function Page() {
                     <td className="px-3.5 py-3">{period.status}</td>
                     <td className="px-3.5 py-3 text-end">
                       <Link
-                        href={`/periode-absensi/${period.id}/ringkasan`}
-                        className="btn btn-sm border border-default-200"
-                        aria-label={`Lihat ringkasan absensi ${period.name}`}
+                        href={`/payroll/${period.id}`}
+                        className="btn size-8 bg-primary/20 text-primary hover:bg-primary hover:text-white"
+                        title="Buka Payroll"
+                        aria-label={`Buka payroll ${period.name}`}
                       >
-                        Lihat Ringkasan
+                        <LuInfo className="size-4" aria-hidden="true" />
                       </Link>
                     </td>
                   </tr>

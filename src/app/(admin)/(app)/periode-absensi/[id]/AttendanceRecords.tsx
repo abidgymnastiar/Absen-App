@@ -2,27 +2,15 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import {
-  LuDownload,
-  LuFileChartColumn,
-  LuInfo,
-  LuPencil,
-  LuPlus,
-  LuSearch,
-  LuTrash2,
-} from 'react-icons/lu';
+import { LuFileChartColumn, LuInfo, LuPencil, LuPlus, LuSearch, LuTrash2 } from 'react-icons/lu';
 import { deleteAttendance, saveAttendance } from '../actions';
+import AttendanceImport from '../AttendanceImport';
 import type { Period } from '../periods';
 
 import { fields, type Attendance } from './attendanceData';
 import AttendanceFields from './AttendanceFields';
 
 type Editor = { mode: 'add' } | { mode: 'view' | 'edit' | 'delete'; record: Attendance };
-
-function csvCell(value: string) {
-  const safe = /^[\s]*[=+@-]|^[\t\r\n]/.test(value) ? `'${value}` : value;
-  return `"${safe.replaceAll('"', '""')}"`;
-}
 
 export default function AttendanceRecords({
   period,
@@ -31,7 +19,6 @@ export default function AttendanceRecords({
   period: Period;
   records: Attendance[];
 }) {
-  const month = period.startDate.slice(0, 7);
   const [pending, setPending] = useState(false);
   const [query, setQuery] = useState('');
   const [editor, setEditor] = useState<Editor | null>(null);
@@ -73,12 +60,6 @@ export default function AttendanceRecords({
     }
   }
 
-  const csv = [
-    fields.map(field => csvCell(field.label)),
-    ...visible.map(record => fields.map(({ key }) => csvCell(record[key]))),
-  ]
-    .map(row => row.join(','))
-    .join('\r\n');
   const title = {
     add: 'Tambah Absensi',
     view: 'Detail Absensi',
@@ -104,13 +85,7 @@ export default function AttendanceRecords({
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <a
-            className="btn btn-sm border border-default-200 text-default-700"
-            href={`data:text/csv;charset=utf-8,${encodeURIComponent('\uFEFF' + csv)}`}
-            download={`absensi-${month}.csv`}
-          >
-            <LuDownload className="size-4" aria-hidden="true" /> Ekspor
-          </a>
+          <AttendanceImport period={period} />
           <Link
             href={`/periode-absensi/${period.id}/ringkasan`}
             className="btn btn-sm border border-default-200 text-default-700"

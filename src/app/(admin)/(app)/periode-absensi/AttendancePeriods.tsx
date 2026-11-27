@@ -144,7 +144,7 @@ export default function AttendancePeriods({ periods }: { periods: Period[] }) {
               onChange={event => setSearch(event.target.value)}
             />
           </div>
-          <AttendanceImport />
+          <AttendanceImport periods={periods} />
         </div>
         <div className="overflow-x-auto">
           <table
@@ -251,7 +251,7 @@ export default function AttendancePeriods({ periods }: { periods: Period[] }) {
           {selected?.mode === 'delete' && (
             <p>
               Hapus periode <strong>{selected.period.name}</strong> beserta semua catatan scan,
-              koreksi absensi, dan jadwal liburnya?
+              koreksi absensi, jadwal libur, data lembur, dan draf payrollnya?
             </p>
           )}
           {error && (

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { LuSearch } from 'react-icons/lu';
 import { saveAttendanceHolidays } from '../../actions';
 import type { Period } from '../../periods';
 
@@ -19,9 +20,14 @@ export default function AttendanceHolidayDialog({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [changes, setChanges] = useState(new Map<string, number | null>());
+  const [search, setSearch] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const selected = [...changes].map(([employeeId, weekday]) => ({ employeeId, weekday }));
+  const query = search.trim().toLowerCase();
+  const visibleEmployees = employees.filter(([id, employee]) =>
+    `${employee.name} ${id}`.toLowerCase().includes(query)
+  );
 
   useEffect(() => {
     dialog.current?.showModal();
@@ -63,12 +69,29 @@ export default function AttendanceHolidayDialog({
           <p className="text-sm text-default-600">
             Hari yang dipilih berlaku setiap minggu dalam periode ini.
           </p>
+          <div className="relative">
+            <LuSearch
+              className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-default-500"
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              aria-label="Cari nama atau ID pegawai"
+              placeholder="Cari nama atau ID pegawai"
+              className="form-input form-input-sm ps-9"
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter') event.preventDefault();
+              }}
+            />
+          </div>
           <div className="max-h-[55vh] divide-y divide-default-200 overflow-auto rounded border border-default-200">
             <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_8rem] gap-2 bg-default-100 px-3 py-2 text-xs font-semibold text-default-700 sm:grid-cols-[minmax(0,1fr)_10rem] sm:gap-4">
               <span>Karyawan</span>
               <span>Hari libur</span>
             </div>
-            {employees.map(([id, employee]) => {
+            {visibleEmployees.map(([id, employee]) => {
               const name = employee.name || id;
               const previous = holidayByEmployee.get(id) ?? null;
               const weekday = changes.has(id) ? changes.get(id) : previous;
@@ -109,6 +132,11 @@ export default function AttendanceHolidayDialog({
                 </label>
               );
             })}
+            {visibleEmployees.length === 0 && (
+              <p role="status" className="px-3 py-4 text-sm text-default-600">
+                Pegawai tidak ditemukan.
+              </p>
+            )}
           </div>
           {error && (
             <p role="alert" className="text-sm text-danger">

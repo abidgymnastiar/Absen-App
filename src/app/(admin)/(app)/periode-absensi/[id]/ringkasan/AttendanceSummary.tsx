@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { LuDownload, LuSearch } from 'react-icons/lu';
+import { LuCalendarDays, LuClock, LuDownload, LuSearch } from 'react-icons/lu';
 import type { Period } from '../../periods';
 import AttendanceSummaryCards from '../AttendanceSummaryCards';
 import {
@@ -17,17 +17,24 @@ import {
 } from '../attendanceData';
 import AttendanceDayDialog from './AttendanceDayDialog';
 import AttendanceHolidayDialog from './AttendanceHolidayDialog';
+import AttendanceOvertimeDialog from './AttendanceOvertimeDialog';
+import type { AttendanceOvertime } from '../../overtime';
 import { exportAttendance } from './exportAttendance';
 
 const recapColumns = [
-  { label: 'Hadir', statuses: ['Hadir'] },
+  { label: 'Hadir', statuses: ['Hadir'], color: 'bg-green-100 text-green-900' },
   {
     label: 'Absen belum lengkap',
     statuses: ['Belum absen keluar', 'Belum absen masuk', 'Absen belum lengkap'],
+    color: 'bg-warning/15 text-default-900',
   },
-  { label: 'Libur', statuses: ['libur'] },
-  { label: 'Sakit', statuses: ['s', 'sakit'] },
-  { label: 'Izin / Tidak hadir', statuses: ['i', 'izin', 'a', 'Tidak hadir'] },
+  { label: 'Libur', statuses: ['libur'], color: dailyIndicators.L.color },
+  { label: 'Sakit', statuses: ['s', 'sakit'], color: 'bg-default-100 text-default-800' },
+  {
+    label: 'Izin / Tidak hadir',
+    statuses: ['i', 'izin', 'a', 'Tidak hadir'],
+    color: 'bg-default-100 text-default-800',
+  },
 ] as const;
 
 type DaySelection = {
@@ -42,12 +49,17 @@ export default function AttendanceSummary({
   records,
   corrections,
   holidaySchedules,
+  overtimeEntries,
 }: {
   period: Period;
   records: Attendance[];
   corrections: Record<string, AttendanceStatus>;
   holidaySchedules: AttendanceHolidaySchedule[];
+  overtimeEntries: AttendanceOvertime[];
 }) {
+  const [overtimeOpen, setOvertimeOpen] = useState(false);
+  const [overtimeMessage, setOvertimeMessage] = useState('');
+  const overtimeButton = useRef<HTMLButtonElement>(null);
   const [holidayOpen, setHolidayOpen] = useState(false);
   const [holidayMessage, setHolidayMessage] = useState('');
   const holidayButton = useRef<HTMLButtonElement>(null);
@@ -153,7 +165,7 @@ export default function AttendanceSummary({
       roster.get(employeeId)?.days.set(date, dailyIndicators[correction].status);
   }
 
-  const holidayEmployees = [...roster].filter(([id]) => id.trim());
+  const periodEmployees = [...roster].filter(([id]) => id.trim());
   const employees = [...roster].filter(([id, employee]) =>
     `${id} ${employee.name}`.toLowerCase().includes(query.trim().toLowerCase())
   );
@@ -172,7 +184,7 @@ export default function AttendanceSummary({
     try {
       await exportAttendance(period.name, dates, employees, effectiveCorrections);
     } catch {
-      setExportError('Ekspor Excel gagal. Coba lagi.');
+      setExportError('Rekap Excel gagal diunduh. Coba lagi.');
     } finally {
       setExporting(false);
     }
@@ -189,76 +201,125 @@ export default function AttendanceSummary({
       />
 
       <div className="card mb-5">
-        <div className="card-header flex-wrap gap-3 py-3">
-          <div className="relative">
-            <LuSearch
-              className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-default-500"
-              aria-hidden="true"
-            />
-            <input
-              ref={searchInput}
-              type="search"
-              className="form-input form-input-sm ps-9"
-              placeholder="Cari karyawan..."
-              aria-label="Cari karyawan"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-            />
+        <div className="space-y-4 border-b border-default-200 px-4 py-4 sm:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-heading">Rekap per Karyawan</h2>
+              <p className="text-xs text-default-600" aria-live="polite">
+                {dates.length > 0 ? employees.length : 0} karyawan · {dates.length} hari
+              </p>
+            </div>
+            <div
+              className="flex flex-wrap items-center gap-2"
+              role="group"
+              aria-label="Aksi absensi"
+            >
+              <button
+                type="button"
+                className="btn btn-sm bg-primary text-white whitespace-nowrap"
+                disabled={exporting || dates.length === 0 || employees.length === 0}
+                onClick={downloadExcel}
+              >
+                <LuDownload className="size-4" aria-hidden="true" />
+                {exporting ? 'Menyiapkan Excel…' : 'Unduh Rekap Excel'}
+              </button>
+              <button
+                ref={holidayButton}
+                type="button"
+                className="btn btn-sm border border-default-200 whitespace-nowrap"
+                aria-haspopup="dialog"
+                disabled={!period.startDate || !periodEmployees.length}
+                onClick={() => {
+                  setHolidayMessage('');
+                  setHolidayOpen(true);
+                }}
+              >
+                <LuCalendarDays className="size-4" aria-hidden="true" />
+                List Libur
+              </button>
+              <button
+                ref={overtimeButton}
+                type="button"
+                className="btn btn-sm border border-default-200 whitespace-nowrap"
+                aria-haspopup="dialog"
+                disabled={!period.startDate || !periodEmployees.length}
+                onClick={() => {
+                  setOvertimeMessage('');
+                  setOvertimeOpen(true);
+                }}
+              >
+                <LuClock className="size-4" aria-hidden="true" />
+                Input Lembur
+              </button>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-sm text-default-600">
-            <label className="flex items-center gap-2">
-              Dari
-              <input
-                type="date"
-                className="form-input form-input-sm"
-                min={period.startDate}
-                max={to}
-                value={from}
-                onChange={event => setFrom(event.target.value || period.startDate)}
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="relative min-w-0 sm:w-60">
+              <LuSearch
+                className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-default-500"
+                aria-hidden="true"
               />
-            </label>
-            <label className="flex items-center gap-2">
-              Sampai
               <input
-                type="date"
-                className="form-input form-input-sm"
-                min={from}
-                max={period.endDate}
-                value={to}
-                onChange={event => setTo(event.target.value || period.endDate)}
+                ref={searchInput}
+                type="search"
+                className="form-input form-input-sm ps-9"
+                placeholder="Cari nama atau ID pegawai"
+                aria-label="Cari karyawan"
+                value={query}
+                onChange={event => setQuery(event.target.value)}
               />
-            </label>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-sm text-default-700">
+              <label className="block min-w-0 space-y-1">
+                <span className="block text-xs font-medium">Dari</span>
+                <input
+                  type="date"
+                  className="form-input form-input-sm min-w-0 sm:w-36!"
+                  min={period.startDate}
+                  max={to}
+                  value={from}
+                  onChange={event => setFrom(event.target.value || period.startDate)}
+                />
+              </label>
+              <label className="block min-w-0 space-y-1">
+                <span className="block text-xs font-medium">Sampai</span>
+                <input
+                  type="date"
+                  className="form-input form-input-sm min-w-0 sm:w-36!"
+                  min={from}
+                  max={period.endDate}
+                  value={to}
+                  onChange={event => setTo(event.target.value || period.endDate)}
+                />
+              </label>
+            </div>
+
+            <div
+              className="inline-flex w-fit items-center rounded-md border border-default-200 bg-default-100 p-0.5 sm:ms-auto"
+              role="group"
+              aria-label="Tampilan absensi"
+            >
+              {[
+                { daily: false, label: 'Rekap' },
+                { daily: true, label: 'Harian' },
+              ].map(({ daily, label }) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-pressed={showDaily === daily}
+                  className={`cursor-pointer rounded px-3 py-1.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-primary ${showDaily === daily ? 'bg-card text-primary shadow-sm' : 'text-default-600 hover:text-heading'}`}
+                  onClick={() => setShowDaily(daily)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-          <button
-            type="button"
-            className="btn btn-sm border border-default-200"
-            aria-pressed={showDaily}
-            onClick={() => setShowDaily(value => !value)}
-          >
-            Rincian harian
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm border border-default-200"
-            disabled={exporting || dates.length === 0 || employees.length === 0}
-            onClick={downloadExcel}
-          >
-            <LuDownload className="size-4" aria-hidden="true" />
-            {exporting ? 'Mengekspor…' : 'Ekspor Excel'}
-          </button>
-          <button
-            ref={holidayButton}
-            type="button"
-            className="btn btn-sm border border-default-200"
-            aria-haspopup="dialog"
-            disabled={!period.startDate || !holidayEmployees.length}
-            onClick={() => {
-              setHolidayMessage('');
-              setHolidayOpen(true);
-            }}
-          >
-            List Libur
-          </button>
+          {overtimeMessage && (
+            <p role="status" className="text-sm text-success">
+              {overtimeMessage}
+            </p>
+          )}
           {holidayMessage && (
             <p role="status" className="text-sm text-success">
               {holidayMessage}
@@ -308,10 +369,10 @@ export default function AttendanceSummary({
             <tbody className="divide-y divide-default-200 text-default-800">
               {dates.length > 0 &&
                 employees.map(([id, employee]) => (
-                  <tr key={id}>
+                  <tr key={id} className="group hover:bg-default-50">
                     <th
                       scope="row"
-                      className="sticky start-0 z-10 max-w-52 whitespace-normal break-words border-e border-default-200 bg-card px-3.5 py-3 text-start font-medium"
+                      className="sticky start-0 z-10 max-w-52 whitespace-normal break-words border-e border-default-200 bg-card px-3.5 py-2.5 text-start font-medium group-hover:bg-default-50"
                     >
                       {employee.name}
                       {employee.position && (
@@ -320,17 +381,22 @@ export default function AttendanceSummary({
                         </div>
                       )}
                     </th>
-                    {recapColumns.map(({ label, statuses }) => (
-                      <td key={label} className="px-3.5 py-3 text-center tabular-nums">
-                        {
-                          [...employee.days.values()].filter(status =>
-                            statuses.some(
-                              value => value === status || value === status.trim().toLowerCase()
-                            )
-                          ).length
-                        }
-                      </td>
-                    ))}
+                    {recapColumns.map(({ label, statuses, color }) => {
+                      const count = [...employee.days.values()].filter(status =>
+                        statuses.some(
+                          value => value === status || value === status.trim().toLowerCase()
+                        )
+                      ).length;
+                      return (
+                        <td key={label} className="px-3.5 py-2.5 text-center tabular-nums">
+                          <span
+                            className={`inline-block min-w-8 rounded px-1.5 py-0.5 ${count ? `font-semibold ${color}` : 'text-default-500'}`}
+                          >
+                            {count}
+                          </span>
+                        </td>
+                      );
+                    })}
                     {visibleDates.map(({ date, isSunday }) => {
                       const status = employee.days.get(date);
                       const indicator = dailyIndicatorEntries.find(
@@ -432,10 +498,23 @@ export default function AttendanceSummary({
           )}
         </div>
       </div>
+      {overtimeOpen && (
+        <AttendanceOvertimeDialog
+          period={period}
+          initialDate={dates[0] ?? period.startDate}
+          employees={periodEmployees}
+          entries={overtimeEntries}
+          onSaved={setOvertimeMessage}
+          onClose={() => {
+            setOvertimeOpen(false);
+            overtimeButton.current?.focus();
+          }}
+        />
+      )}
       {holidayOpen && (
         <AttendanceHolidayDialog
           period={period}
-          employees={holidayEmployees}
+          employees={periodEmployees}
           holidayByEmployee={holidayByEmployee}
           onSaved={setHolidayMessage}
           onClose={() => {
