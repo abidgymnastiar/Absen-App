@@ -64,17 +64,23 @@ export const menuItemsData: MenuItemType[] = [
     isTitle: true,
   },
   {
-    key: 'Chat',
-    label: 'Chat',
-    icon: LuMessagesSquare,
-    href: '/chat',
+    key: 'Periode Absensi',
+    label: 'Periode Absensi',
+    icon: LuCalendar1,
+    href: '/periode-absensi',
   },
   // {
-  //   key: 'Calendar',
-  //   label: 'Calendar',
-  //   icon: LuCalendar1,
-  //   href: '/calendar',
+  //   key: 'Chat',
+  //   label: 'Chat',
+  //   icon: LuMessagesSquare,
+  //   href: '/chat',
   // },
+  {
+    key: 'Calendar',
+    label: 'Calendar',
+    icon: LuCalendar1,
+    href: '/calendar',
+  },
   // {
   //   key: 'Email',
   //   label: 'Email',
@@ -103,70 +109,70 @@ export const menuItemsData: MenuItemType[] = [
   //     { key: 'Sellers', label: 'Sellers', href: '/sellers' },
   //   ],
   // },
-  // {
-  //   key: 'HR Management',
-  //   label: 'HR Management',
-  //   icon: LuCircuitBoard,
-  //   children: [
-  //     { key: 'Employee List', label: 'Employee List', href: '/employee' },
-  //     { key: 'Holidays', label: 'Holidays', href: '/holidays' },
-  //     {
-  //       key: 'Leave Manage',
-  //       label: 'Leave Manage',
-  //       href: '#',
-  //       children: [
-  //         { key: 'By Employee', label: 'By Employee', href: '/leave-employee' },
-  //         {
-  //           key: 'Add Leave(Employee)',
-  //           label: 'Add Leave(Employee)',
-  //           href: '/create-leave-employee',
-  //         },
-  //         { key: 'By HR', label: 'By HR', href: '/leave' },
-  //         { key: 'Add Leave(HR)', label: 'Add Leave(HR)', href: '/create-leave' },
-  //       ],
-  //     },
-  //     {
-  //       key: 'Attendance',
-  //       label: 'Attendance',
-  //       href: '#',
-  //       children: [
-  //         { key: 'Attendance(HR)', label: 'Attendance(HR)', href: '/attendance' },
-  //         { key: 'Main Attendance', label: 'Main Attendance', href: '/attendance-main' },
-  //       ],
-  //     },
-  //     { key: 'Department', label: 'Department', href: '/department' },
-  //     {
-  //       key: 'Sales',
-  //       label: 'Sales',
-  //       href: '#',
-  //       children: [
-  //         { key: 'Estimates', label: 'Estimates', href: '/sales-estimates' },
-  //         { key: 'Payments', label: 'Payments', href: '/sales-payments' },
-  //         { key: 'Expenses', label: 'Expenses', href: '/sales-expenses' },
-  //       ],
-  //     },
-  //     {
-  //       key: 'Payroll',
-  //       label: 'Payroll',
-  //       href: '#',
-  //       children: [
-  //         { key: 'Employee Salary', label: 'Employee Salary', href: '/payroll-employee-salary' },
-  //         { key: 'Payslip', label: 'Payslip', href: '/payroll-payslip' },
-  //         { key: 'Create Payslip', label: 'Create Payslip', href: '/create-payslip' },
-  //       ],
-  //     },
-  //   ],
-  // },
-  // {
-  //   key: 'Invoice',
-  //   label: 'Invoice',
-  //   icon: LuFileText,
-  //   children: [
-  //     { key: 'Overview', label: 'Overview', href: '/overview' },
-  //     { key: 'List Invoice', label: 'List Invoice', href: '/list' },
-  //     { key: 'Add Invoice', label: 'Add Invoice', href: '/add-new' },
-  //   ],
-  // },
+  {
+    key: 'HR Management',
+    label: 'HR Management',
+    icon: LuCircuitBoard,
+    children: [
+      { key: 'Employee List', label: 'Employee List', href: '/employee' },
+      { key: 'Holidays', label: 'Holidays', href: '/holidays' },
+      {
+        key: 'Leave Manage',
+        label: 'Leave Manage',
+        href: '#',
+        children: [
+          { key: 'By Employee', label: 'By Employee', href: '/leave-employee' },
+          {
+            key: 'Add Leave(Employee)',
+            label: 'Add Leave(Employee)',
+            href: '/create-leave-employee',
+          },
+          { key: 'By HR', label: 'By HR', href: '/leave' },
+          { key: 'Add Leave(HR)', label: 'Add Leave(HR)', href: '/create-leave' },
+        ],
+      },
+      {
+        key: 'Attendance',
+        label: 'Attendance',
+        href: '#',
+        children: [
+          { key: 'Attendance(HR)', label: 'Attendance(HR)', href: '/attendance' },
+          { key: 'Main Attendance', label: 'Main Attendance', href: '/attendance-main' },
+        ],
+      },
+      { key: 'Department', label: 'Department', href: '/department' },
+      {
+        key: 'Sales',
+        label: 'Sales',
+        href: '#',
+        children: [
+          { key: 'Estimates', label: 'Estimates', href: '/sales-estimates' },
+          { key: 'Payments', label: 'Payments', href: '/sales-payments' },
+          { key: 'Expenses', label: 'Expenses', href: '/sales-expenses' },
+        ],
+      },
+      {
+        key: 'Payroll',
+        label: 'Payroll',
+        href: '#',
+        children: [
+          { key: 'Employee Salary', label: 'Employee Salary', href: '/payroll-employee-salary' },
+          { key: 'Payslip', label: 'Payslip', href: '/payroll-payslip' },
+          { key: 'Create Payslip', label: 'Create Payslip', href: '/create-payslip' },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'Invoice',
+    label: 'Invoice',
+    icon: LuFileText,
+    children: [
+      { key: 'Overview', label: 'Overview', href: '/overview' },
+      { key: 'List Invoice', label: 'List Invoice', href: '/list' },
+      { key: 'Add Invoice', label: 'Add Invoice', href: '/add-new' },
+    ],
+  },
   // {
   //   key: 'Users',
   //   label: 'Users',
