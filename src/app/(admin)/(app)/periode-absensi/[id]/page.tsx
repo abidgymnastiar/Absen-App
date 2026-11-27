@@ -19,12 +19,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const data = await getPeriod(id);
   if (!data) notFound();
   const { period, records, corrections, holidaySchedules } = data;
-  const { duplicateDayCount } = getDuplicateAttendance(records);
+  const { byEmployee: scans, workDates } = getAttendanceScans(records);
+  const { duplicateDayCount } = getDuplicateAttendance(records, undefined, workDates);
   const holidayByEmployee = new Map(
     holidaySchedules.map(({ employeeId, weekday }) => [employeeId, weekday])
   );
   const employees = new Set<string>();
-  const scans = getAttendanceScans(records);
   const presentEmployees = new Set<string>();
   const recordedDays = new Set<string>();
   for (const record of records) {

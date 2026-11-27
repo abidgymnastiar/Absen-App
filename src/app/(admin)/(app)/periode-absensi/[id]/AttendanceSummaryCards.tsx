@@ -64,7 +64,7 @@ export default function AttendanceSummaryCards({
           <LuLayers className="size-4 shrink-0 text-info" aria-hidden="true" />
           <span>
             Ada <strong>{duplicateDayCount}</strong> kejadian duplikat untuk jenis absen yang sama,
-            pada pegawai dan tanggal yang sama.
+            pada pegawai dan hari kerja yang sama.
           </span>
         </p>
       )}

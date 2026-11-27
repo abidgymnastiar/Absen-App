@@ -100,11 +100,12 @@ export default function AttendanceSummary({
     }
   >();
   const dateSet = new Set(dates);
+  const { byEmployee: scansByEmployee, workDates } = getAttendanceScans(records);
   const { byEmployee: duplicatesByEmployee, duplicateDayCount } = getDuplicateAttendance(
     records,
-    dateSet
+    dateSet,
+    workDates
   );
-  const scansByEmployee = getAttendanceScans(records, dateSet);
   let scanCount = 0;
   const loggedDates = new Set<string>();
   for (const record of records) {
@@ -117,8 +118,13 @@ export default function AttendanceSummary({
     if (!employee.position) employee.position = record.position;
     roster.set(record.employeeId, employee);
     if (dateSet.has(record.date)) {
+      loggedDates.add(record.date);
+      scanCount++;
+    }
+    const workDate = workDates.get(record.id) ?? record.date;
+    if (dateSet.has(workDate)) {
       const type = record.attendanceType.trim().toLowerCase();
-      const scans = scansByEmployee.get(record.employeeId)?.get(record.date);
+      const scans = scansByEmployee.get(record.employeeId)?.get(workDate);
       const isAbsent = [
         'a',
         'alpa',
@@ -136,12 +142,10 @@ export default function AttendanceSummary({
       else if (isAbsent) status = 'Tidak hadir';
       else if (type === 'l' || type === 'libur') status = 'Libur';
       else if (type === 'i' || type === 'izin') status = 'Izin';
-      if (type || !employee.automaticDays.has(record.date)) {
-        employee.automaticDays.set(record.date, status);
+      if (type || !employee.automaticDays.has(workDate)) {
+        employee.automaticDays.set(workDate, status);
       }
-      if (type || !employee.days.has(record.date)) employee.days.set(record.date, status);
-      loggedDates.add(record.date);
-      scanCount++;
+      if (type || !employee.days.has(workDate)) employee.days.set(workDate, status);
     }
   }
 
@@ -331,6 +335,19 @@ export default function AttendanceSummary({
             </p>
           )}
         </div>
+        {showDaily && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-default-200 px-4 py-3 text-xs text-default-700 sm:px-5">
+            {dailyIndicatorEntries.map(([code, { label, color }]) => (
+              <span key={code} className="inline-flex items-center gap-1.5">
+                <span className={`rounded px-1.5 py-0.5 font-semibold ${color}`}>{code}</span>
+                {label}
+              </span>
+            ))}
+            <span>– Belum tercatat</span>
+            <span>Shift malam mengikuti tanggal masuk.</span>
+            <span className="text-default-500 sm:ms-auto">Klik status untuk mengedit.</span>
+          </div>
+        )}
         <div
           className="max-h-[65vh] overflow-auto"
           role="region"
@@ -349,11 +366,6 @@ export default function AttendanceSummary({
                 >
                   Nama Karyawan
                 </th>
-                {recapColumns.map(({ label }) => (
-                  <th key={label} scope="col" className="px-3.5 py-3 font-medium">
-                    {label}
-                  </th>
-                ))}
                 {visibleDates.map(({ date, isSunday }) => (
                   <th
                     key={date}
@@ -362,6 +374,11 @@ export default function AttendanceSummary({
                   >
                     {date.slice(8)}/{date.slice(5, 7)}
                     {isSunday && <span className="sr-only">, Minggu</span>}
+                  </th>
+                ))}
+                {recapColumns.map(({ label }) => (
+                  <th key={label} scope="col" className="px-3.5 py-3 font-medium">
+                    {label}
                   </th>
                 ))}
               </tr>
@@ -381,22 +398,6 @@ export default function AttendanceSummary({
                         </div>
                       )}
                     </th>
-                    {recapColumns.map(({ label, statuses, color }) => {
-                      const count = [...employee.days.values()].filter(status =>
-                        statuses.some(
-                          value => value === status || value === status.trim().toLowerCase()
-                        )
-                      ).length;
-                      return (
-                        <td key={label} className="px-3.5 py-2.5 text-center tabular-nums">
-                          <span
-                            className={`inline-block min-w-8 rounded px-1.5 py-0.5 ${count ? `font-semibold ${color}` : 'text-default-500'}`}
-                          >
-                            {count}
-                          </span>
-                        </td>
-                      );
-                    })}
                     {visibleDates.map(({ date, isSunday }) => {
                       const status = employee.days.get(date);
                       const indicator = dailyIndicatorEntries.find(
@@ -463,6 +464,22 @@ export default function AttendanceSummary({
                         </td>
                       );
                     })}
+                    {recapColumns.map(({ label, statuses, color }) => {
+                      const count = [...employee.days.values()].filter(status =>
+                        statuses.some(
+                          value => value === status || value === status.trim().toLowerCase()
+                        )
+                      ).length;
+                      return (
+                        <td key={label} className="px-3.5 py-2.5 text-center tabular-nums">
+                          <span
+                            className={`inline-block min-w-8 rounded px-1.5 py-0.5 ${count ? `font-semibold ${color}` : 'text-default-500'}`}
+                          >
+                            {count}
+                          </span>
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               {(dates.length === 0 || employees.length === 0) && (
@@ -482,21 +499,11 @@ export default function AttendanceSummary({
             </tbody>
           </table>
         </div>
-        <div className="card-footer flex-wrap py-2 text-sm text-default-500">
-          {showDaily ? (
-            <p>
-              {dailyIndicatorEntries.map(([code, { label, color }]) => (
-                <span key={code} className="me-3 inline-block">
-                  <span className={`rounded px-1.5 py-0.5 font-semibold ${color}`}>{code}</span>{' '}
-                  {label}
-                </span>
-              ))}
-              <span>– Belum tercatat. Klik status untuk mengedit.</span>
-            </p>
-          ) : (
+        {!showDaily && (
+          <div className="card-footer py-2 text-sm text-default-500">
             <p>Jumlah hari per karyawan dalam rentang yang dipilih.</p>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       {overtimeOpen && (
         <AttendanceOvertimeDialog
@@ -531,16 +538,13 @@ export default function AttendanceSummary({
           date={selection.date}
           type={selection.type}
           correction={corrections[attendanceDayKey(selection.employeeId, selection.date)]}
+          scans={scansByEmployee.get(selection.employeeId)?.get(selection.date)}
           scheduledHoliday={isScheduledHoliday(
             selection.date,
             holidayByEmployee.get(selection.employeeId)
           )}
-          records={records.filter(
-            record =>
-              record.employeeId === selection.employeeId &&
-              record.date === selection.date &&
-              (!selection.type || record.attendanceType.trim().toLowerCase() === selection.type)
-          )}
+          employeeRecords={records.filter(record => record.employeeId === selection.employeeId)}
+          workDates={workDates}
           onClose={() => {
             setSelection(null);
             if (editButton.current?.isConnected) {

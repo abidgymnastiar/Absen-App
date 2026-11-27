@@ -68,12 +68,23 @@ export function calculatePayroll(
   const overtime = Math.round(
     (employee.minutesL * rates.overtimeL + employee.minutesLB * rates.overtimeLB) / 60
   );
-  const gross = basePay + components.allowance + components.incentive + overtime;
+  const baseSubtotal = basePay + components.allowance + components.incentive;
+  const gross = baseSubtotal + overtime;
   const bpjsTk = Math.round((rates.bpjsBase * 2) / 100);
   const bpjsKes = Math.round(rates.bpjsBase / 100);
   const deductions = attendanceDeduction + bpjsTk + bpjsKes + components.otherDeduction;
   const net = gross - deductions;
-  return { basePay, overtime, attendanceDeduction, gross, bpjsTk, bpjsKes, deductions, net };
+  return {
+    basePay,
+    baseSubtotal,
+    overtime,
+    attendanceDeduction,
+    gross,
+    bpjsTk,
+    bpjsKes,
+    deductions,
+    net,
+  };
 }
 
 export function getPayrollEmployees(
@@ -103,7 +114,7 @@ export function getPayrollEmployees(
   }
   const inPeriod = (date: string) =>
     date !== '' && date >= period.startDate && date <= period.endDate;
-  const scans = getAttendanceScans(records);
+  const { byEmployee: scans } = getAttendanceScans(records);
   const weekdays = new Map(schedules.map(({ employeeId, weekday }) => [employeeId, weekday]));
   for (const employee of roster.values()) {
     for (const [date, scan] of scans.get(employee.employeeId) ?? []) {
