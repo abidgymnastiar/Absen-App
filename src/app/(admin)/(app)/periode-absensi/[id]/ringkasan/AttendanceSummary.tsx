@@ -1,11 +1,19 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { LuCheck, LuSearch, LuX } from 'react-icons/lu';
+import { LuSearch } from 'react-icons/lu';
 import type { Period } from '../../periods';
 import AttendanceSummaryCards from '../AttendanceSummaryCards';
-import { getAttendanceScans, getDuplicateAttendance, type Attendance } from '../attendanceData';
-import DuplicateAttendanceDialog from './DuplicateAttendanceDialog';
+import {
+  attendanceDayKey,
+  dailyIndicators,
+  dailyIndicatorEntries,
+  type AttendanceStatus,
+  getAttendanceScans,
+  getDuplicateAttendance,
+  type Attendance,
+} from '../attendanceData';
+import AttendanceDayDialog from './AttendanceDayDialog';
 
 const recapColumns = [
   { label: 'Hadir', statuses: ['Hadir'] },
@@ -13,30 +21,32 @@ const recapColumns = [
     label: 'Absen belum lengkap',
     statuses: ['Belum absen keluar', 'Belum absen masuk', 'Absen belum lengkap'],
   },
+  { label: 'Libur', statuses: ['libur'] },
   { label: 'Sakit', statuses: ['s', 'sakit'] },
-  { label: 'Izin / Alpa', statuses: ['i', 'izin', 'a', 'Tidak hadir'] },
+  { label: 'Izin / Tidak hadir', statuses: ['i', 'izin', 'a', 'Tidak hadir'] },
 ] as const;
 
-type DuplicateSelection = {
+type DaySelection = {
   employeeId: string;
   employeeName: string;
   date: string;
-  type: string;
-  recordIds: Set<string>;
+  type?: string;
 };
 
 export default function AttendanceSummary({
   period,
   records,
+  corrections,
 }: {
   period: Period;
   records: Attendance[];
+  corrections: Record<string, AttendanceStatus>;
 }) {
   const [showDaily, setShowDaily] = useState(false);
   const [query, setQuery] = useState('');
-  const [selection, setSelection] = useState<DuplicateSelection | null>(null);
+  const [selection, setSelection] = useState<DaySelection | null>(null);
   const searchInput = useRef<HTMLInputElement>(null);
-  const duplicateButton = useRef<HTMLButtonElement>(null);
+  const editButton = useRef<HTMLButtonElement>(null);
   const [from, setFrom] = useState<string>(period.startDate);
   const [to, setTo] = useState(() => {
     if (!period.startDate) return '';
@@ -77,13 +87,25 @@ export default function AttendanceSummary({
     if (dateSet.has(record.date)) {
       const type = record.attendanceType.trim().toLowerCase();
       const scans = scansByEmployee.get(record.employeeId)?.get(record.date);
-      const isAbsent = ['alpa', 'absen', 'alpha', 'tidak hadir'].includes(type);
+      const isAbsent = [
+        'a',
+        'alpa',
+        'absen',
+        'alpha',
+        'off',
+        'tidak hadir',
+        'tidak masuk',
+      ].includes(type);
       let status = record.attendanceType;
       if (scans?.masuk && scans.keluar) status = 'Hadir';
       else if (scans?.masuk) status = 'Belum absen keluar';
       else if (scans?.keluar) status = 'Belum absen masuk';
       else if (type === 'hadir') status = 'Absen belum lengkap';
       else if (isAbsent) status = 'Tidak hadir';
+      else if (type === 'l' || type === 'libur') status = 'Libur';
+      else if (type === 'i' || type === 'izin') status = 'Izin';
+      const correction = corrections[attendanceDayKey(record.employeeId, record.date)];
+      if (correction !== undefined) status = dailyIndicators[correction].status;
       if (type || !employee.days.has(record.date)) employee.days.set(record.date, status);
       loggedDates.add(record.date);
       scanCount++;
@@ -98,21 +120,9 @@ export default function AttendanceSummary({
     [...employee.days.values()].includes('Hadir')
   );
 
-  const visibleDates = showDaily ? dates : [];
-
-  function openDuplicate(employeeId: string, employeeName: string, date: string, type: string) {
-    const recordIds = new Set(
-      records
-        .filter(
-          record =>
-            record.employeeId === employeeId &&
-            record.date === date &&
-            record.attendanceType.trim().toLowerCase() === type
-        )
-        .map(record => record.id)
-    );
-    setSelection({ employeeId, employeeName, date, type, recordIds });
-  }
+  const visibleDates = showDaily
+    ? dates.map(date => ({ date, isSunday: new Date(date).getUTCDay() === 0 }))
+    : [];
 
   return (
     <>
@@ -174,14 +184,22 @@ export default function AttendanceSummary({
             Rincian harian
           </button>
         </div>
-        <div className="overflow-x-auto">
+        <div
+          className="max-h-[65vh] overflow-auto"
+          role="region"
+          aria-label="Tabel rekap absensi"
+          tabIndex={0}
+        >
           <table
             aria-label="Rekap absensi per karyawan"
             className="min-w-full divide-y divide-default-200 whitespace-nowrap text-sm"
           >
-            <thead className="bg-default-100 text-default-800">
+            <thead className="sticky top-0 z-20 bg-default-100 text-default-800">
               <tr>
-                <th scope="col" className="px-3.5 py-3 text-start font-medium">
+                <th
+                  scope="col"
+                  className="sticky start-0 z-10 min-w-40 max-w-52 whitespace-normal border-e border-default-200 bg-default-100 px-3.5 py-3 text-start font-medium"
+                >
                   Nama Karyawan
                 </th>
                 {recapColumns.map(({ label }) => (
@@ -189,9 +207,14 @@ export default function AttendanceSummary({
                     {label}
                   </th>
                 ))}
-                {visibleDates.map(date => (
-                  <th key={date} scope="col" className="px-3.5 py-3 font-medium">
+                {visibleDates.map(({ date, isSunday }) => (
+                  <th
+                    key={date}
+                    scope="col"
+                    className={`px-3.5 py-3 font-medium ${isSunday ? 'bg-warning/20' : ''}`}
+                  >
                     {date.slice(8)}/{date.slice(5, 7)}
+                    {isSunday && <span className="sr-only">, Minggu</span>}
                   </th>
                 ))}
               </tr>
@@ -200,7 +223,10 @@ export default function AttendanceSummary({
               {dates.length > 0 &&
                 employees.map(([id, employee]) => (
                   <tr key={id}>
-                    <th scope="row" className="px-3.5 py-3 text-start font-medium">
+                    <th
+                      scope="row"
+                      className="sticky start-0 z-10 max-w-52 whitespace-normal break-words border-e border-default-200 bg-card px-3.5 py-3 text-start font-medium"
+                    >
                       {employee.name}
                       {employee.position && (
                         <div className="text-xs font-normal text-default-500">
@@ -219,29 +245,44 @@ export default function AttendanceSummary({
                         }
                       </td>
                     ))}
-                    {visibleDates.map(date => {
+                    {visibleDates.map(({ date, isSunday }) => {
                       const status = employee.days.get(date);
-                      const duplicates = duplicatesByEmployee.get(id)?.get(date);
+                      const indicator = dailyIndicatorEntries.find(
+                        ([, indicator]) => indicator.status === status
+                      );
+                      const hasCorrection = corrections[attendanceDayKey(id, date)] !== undefined;
+                      const duplicates = hasCorrection
+                        ? undefined
+                        : duplicatesByEmployee.get(id)?.get(date);
                       return (
-                        <td key={date} className="px-3.5 py-3 text-center">
-                          {status === 'Hadir' ? (
-                            <LuCheck
-                              className="inline size-4 text-success"
-                              role="img"
-                              aria-label="Hadir"
-                            />
-                          ) : status === 'Tidak hadir' ? (
-                            <LuX
-                              className="inline size-4 text-danger"
-                              role="img"
-                              aria-label="Tidak hadir"
-                            />
-                          ) : (
-                            <span
-                              className="text-default-500"
-                              aria-label={status ? undefined : 'Belum tercatat'}
+                        <td
+                          key={date}
+                          className={`px-3.5 py-3 text-center ${isSunday ? 'bg-warning/10' : ''}`}
+                        >
+                          {status !== undefined ? (
+                            <button
+                              type="button"
+                              className="cursor-pointer rounded px-1 py-0.5 text-default-700 hover:bg-default-100 hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+                              aria-haspopup="dialog"
+                              aria-label={`Edit absensi ${employee.name} pada ${date}, ${status || 'catatan tanpa jenis'}`}
+                              onClick={event => {
+                                editButton.current = event.currentTarget;
+                                setSelection({ employeeId: id, employeeName: employee.name, date });
+                              }}
                             >
-                              {status || '–'}
+                              {indicator ? (
+                                <span
+                                  className={`inline-block rounded px-2 py-0.5 font-semibold ${indicator[1].color}`}
+                                >
+                                  {indicator[0]}
+                                </span>
+                              ) : (
+                                status || '–'
+                              )}
+                            </button>
+                          ) : (
+                            <span className="text-default-500" aria-label="Belum tercatat">
+                              –
                             </span>
                           )}
                           {duplicates?.map(([type, count]) => (
@@ -252,8 +293,13 @@ export default function AttendanceSummary({
                               aria-haspopup="dialog"
                               aria-label={`Buka ${count} catatan duplikat ${type} untuk ${employee.name} pada ${date}`}
                               onClick={event => {
-                                duplicateButton.current = event.currentTarget;
-                                openDuplicate(id, employee.name, date, type);
+                                editButton.current = event.currentTarget;
+                                setSelection({
+                                  employeeId: id,
+                                  employeeName: employee.name,
+                                  date,
+                                  type,
+                                });
                               }}
                             >
                               <span className="capitalize">
@@ -286,8 +332,13 @@ export default function AttendanceSummary({
         <div className="card-footer flex-wrap py-2 text-sm text-default-500">
           {showDaily ? (
             <p>
-              ✓ Hadir · × Tidak hadir · – Belum tercatat · Klik lencana duplikat untuk mengedit
-              catatannya.
+              {dailyIndicatorEntries.map(([code, { label, color }]) => (
+                <span key={code} className="me-3 inline-block">
+                  <span className={`rounded px-1.5 py-0.5 font-semibold ${color}`}>{code}</span>{' '}
+                  {label}
+                </span>
+              ))}
+              <span>– Belum tercatat. Klik status untuk mengedit.</span>
             </p>
           ) : (
             <p>Jumlah hari per karyawan dalam rentang yang dipilih.</p>
@@ -295,17 +346,23 @@ export default function AttendanceSummary({
         </div>
       </div>
       {selection && (
-        <DuplicateAttendanceDialog
+        <AttendanceDayDialog
           periodId={period.id}
           employeeId={selection.employeeId}
           employeeName={selection.employeeName}
           date={selection.date}
           type={selection.type}
-          records={records.filter(record => selection.recordIds.has(record.id))}
+          correction={corrections[attendanceDayKey(selection.employeeId, selection.date)]}
+          records={records.filter(
+            record =>
+              record.employeeId === selection.employeeId &&
+              record.date === selection.date &&
+              (!selection.type || record.attendanceType.trim().toLowerCase() === selection.type)
+          )}
           onClose={() => {
             setSelection(null);
-            if (duplicateButton.current?.isConnected) {
-              duplicateButton.current.focus();
+            if (editButton.current?.isConnected) {
+              editButton.current.focus();
             } else {
               searchInput.current?.focus();
             }

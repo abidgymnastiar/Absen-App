@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import type { AttendanceLog, DataGroup } from '@/generated/prisma/client';
-import type { Attendance } from './[id]/attendanceData';
+import { attendanceDayKey, type Attendance } from './[id]/attendanceData';
 import type { Period } from './periods';
 
 const formatDate = new Intl.DateTimeFormat('id-ID', {
@@ -81,6 +81,7 @@ export async function getPeriod(id: string) {
   const group = await prisma.dataGroup.findUnique({
     where: { id: groupId },
     include: {
+      attendanceCorrections: true,
       attendanceLogs: { orderBy: [{ attendanceDate: 'asc' }, { scanTime: 'asc' }, { id: 'asc' }] },
     },
   });
@@ -89,5 +90,11 @@ export async function getPeriod(id: string) {
   return {
     period: toPeriod(group, dated[0]?.attendanceDate ?? null, dated.at(-1)?.attendanceDate ?? null),
     records: group.attendanceLogs.map(toAttendance),
+    corrections: Object.fromEntries(
+      group.attendanceCorrections.map(({ employeeId, date, status }) => [
+        attendanceDayKey(employeeId, date.toISOString().slice(0, 10)),
+        status,
+      ])
+    ),
   };
 }

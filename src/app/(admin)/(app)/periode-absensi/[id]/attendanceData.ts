@@ -1,3 +1,16 @@
+export const dailyIndicators = {
+  L: { status: 'Libur', label: 'Libur', color: 'bg-yellow-100 text-yellow-900' },
+  I: { status: 'Izin', label: 'Izin', color: 'bg-orange-100 text-orange-900' },
+  H: { status: 'Hadir', label: 'Masuk', color: 'bg-green-100 text-green-900' },
+  OFF: { status: 'Tidak hadir', label: 'Tidak masuk', color: 'bg-red-100 text-red-900' },
+} as const;
+
+export type AttendanceStatus = keyof typeof dailyIndicators;
+export const dailyIndicatorEntries = Object.entries(dailyIndicators) as [
+  AttendanceStatus,
+  (typeof dailyIndicators)[AttendanceStatus],
+][];
+
 export const fields = [
   { key: 'employeeId', label: 'ID Karyawan', type: 'text', maxLength: 50 },
   { key: 'employeeName', label: 'Nama Karyawan', type: 'text', maxLength: 150 },
@@ -12,6 +25,10 @@ export const fields = [
 ] as const;
 
 export type Attendance = { id: string } & Record<(typeof fields)[number]['key'], string>;
+
+export function attendanceDayKey(employeeId: string, date: string) {
+  return JSON.stringify([employeeId, date]);
+}
 
 export function getAttendanceScans(records: Attendance[], includedDates?: ReadonlySet<string>) {
   const byEmployee = new Map<string, Map<string, { masuk: boolean; keluar: boolean }>>();

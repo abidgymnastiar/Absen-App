@@ -14,6 +14,7 @@ model DataGroup {
   createdAt      DateTime?       @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt      DateTime?       @default(now()) @map("updated_at") @db.Timestamp(0)
   attendanceLogs AttendanceLog[]
+  attendanceCorrections AttendanceCorrection[]
 
   @@map("data_groups")
 }
@@ -37,4 +38,22 @@ model AttendanceLog {
   @@index([dataGroupId], map: "idx_attendance_group")
   @@index([employeeId, attendanceDate], map: "idx_attendance_employee_date")
   @@map("attendance_logs")
+}
+
+enum AttendanceStatus {
+  L
+  I
+  H
+  OFF
+}
+
+model AttendanceCorrection {
+  dataGroupId BigInt    @map("data_group_id")
+  dataGroup   DataGroup @relation(fields: [dataGroupId], references: [id], onDelete: Cascade)
+  employeeId  String    @map("employee_id") @db.VarChar(50)
+  date        DateTime  @map("attendance_date") @db.Date
+  status      AttendanceStatus
+
+  @@id([dataGroupId, employeeId, date])
+  @@map("attendance_corrections")
 }

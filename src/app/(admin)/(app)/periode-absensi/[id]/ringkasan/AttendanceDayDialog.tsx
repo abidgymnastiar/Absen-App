@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { LuPencil } from 'react-icons/lu';
-import { saveAttendance } from '../../actions';
-import type { Attendance } from '../attendanceData';
+import { saveAttendance, saveAttendanceCorrection } from '../../actions';
+import { dailyIndicatorEntries, type Attendance, type AttendanceStatus } from '../attendanceData';
 import AttendanceFields from '../AttendanceFields';
 
-export default function DuplicateAttendanceDialog({
+export default function AttendanceDayDialog({
   periodId,
   employeeName,
   employeeId,
   date,
   type,
+  correction,
   records,
   onClose,
 }: {
@@ -17,7 +18,8 @@ export default function DuplicateAttendanceDialog({
   employeeName: string;
   employeeId: string;
   date: string;
-  type: string;
+  type?: string;
+  correction?: AttendanceStatus;
   records: Attendance[];
   onClose: () => void;
 }) {
@@ -50,23 +52,42 @@ export default function DuplicateAttendanceDialog({
     }
   }
 
+  async function changeStatus(status: AttendanceStatus | null) {
+    if (pending) return;
+    setPending(true);
+    setError('');
+    setMessage('');
+    try {
+      await saveAttendanceCorrection(periodId, employeeId, date, status);
+      setMessage('Status harian tersimpan.');
+    } catch {
+      setError('Status gagal disimpan. Coba lagi.');
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <dialog
       ref={dialog}
       className="fixed inset-0 m-auto max-h-[90dvh] w-11/12 max-w-2xl overflow-y-auto rounded-lg bg-card text-default-800 backdrop:bg-black/50"
-      aria-labelledby="duplicate-attendance-title"
+      aria-labelledby="attendance-day-title"
       onClose={onClose}
       onCancel={event => {
         if (pending) event.preventDefault();
       }}
     >
       <div className="space-y-1 border-b border-default-200 px-5 py-4">
-        <h2 id="duplicate-attendance-title" className="text-base font-semibold">
-          {editing ? 'Edit Catatan Absensi' : 'Catatan Absensi Duplikat'}
+        <h2 id="attendance-day-title" className="text-base font-semibold">
+          {editing
+            ? 'Edit Catatan Absensi'
+            : type
+              ? 'Catatan Absensi Duplikat'
+              : 'Catatan Absensi Harian'}
         </h2>
         <p className="text-sm text-default-600">
-          {employeeName || employeeId} · <time dateTime={date}>{date}</time> ·{' '}
-          <span className="capitalize">{type}</span>
+          {employeeName || employeeId} · <time dateTime={date}>{date}</time>
+          {type && <span className="capitalize"> · {type}</span>}
         </p>
       </div>
       {editing ? (
@@ -95,6 +116,37 @@ export default function DuplicateAttendanceDialog({
         </form>
       ) : (
         <>
+          <div className="space-y-2 border-b border-default-200 px-5 py-3">
+            <p className="text-sm font-medium">Status harian</p>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Status harian">
+              {dailyIndicatorEntries.map(([code, { label, color }]) => (
+                <button
+                  key={code}
+                  type="button"
+                  className={`btn btn-sm ${color} ${correction === code ? 'ring-2 ring-primary ring-offset-1' : ''}`}
+                  aria-pressed={correction === code}
+                  disabled={pending || !employeeId || records.length === 0}
+                  onClick={() => changeStatus(code)}
+                >
+                  {code} · {label}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="btn btn-sm border border-default-200"
+                aria-pressed={correction === undefined}
+                disabled={pending || correction === undefined}
+                onClick={() => changeStatus(null)}
+              >
+                Otomatis dari scan
+              </button>
+            </div>
+            {error && (
+              <p role="alert" className="text-sm text-danger">
+                {error}
+              </p>
+            )}
+          </div>
           <div className="overflow-x-auto">
             <table
               className="min-w-full divide-y divide-default-200 text-sm"
@@ -131,6 +183,7 @@ export default function DuplicateAttendanceDialog({
                         type="button"
                         className="btn btn-sm border border-default-200"
                         aria-label={`Edit catatan ${index + 1}`}
+                        disabled={pending}
                         onClick={() => {
                           setError('');
                           setMessage('');
@@ -161,6 +214,7 @@ export default function DuplicateAttendanceDialog({
             <button
               type="button"
               className="btn btn-sm border border-default-200"
+              disabled={pending}
               onClick={() => dialog.current?.close()}
             >
               Tutup

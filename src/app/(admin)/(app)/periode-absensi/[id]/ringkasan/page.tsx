@@ -11,7 +11,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const { id } = await params;
   const data = await getPeriod(id);
   if (!data) notFound();
-  const { period, records } = data;
+  const { period, records, corrections } = data;
 
   return (
     <main>
@@ -27,7 +27,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           <LuArrowLeft className="size-4" aria-hidden="true" /> Kembali ke Detail
         </Link>
       </div>
-      <AttendanceSummary key={period.id} period={period} records={records} />
+      <AttendanceSummary
+        key={period.id}
+        period={period}
+        records={records}
+        corrections={corrections}
+      />
     </main>
   );
 }

@@ -5,7 +5,7 @@ import { LuArrowLeft } from 'react-icons/lu';
 import { getPeriod } from '../db';
 import AttendanceRecords from './AttendanceRecords';
 import AttendanceSummaryCards from './AttendanceSummaryCards';
-import { getAttendanceScans, getDuplicateAttendance } from './attendanceData';
+import { attendanceDayKey, getAttendanceScans, getDuplicateAttendance } from './attendanceData';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,16 +13,22 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const { id } = await params;
   const data = await getPeriod(id);
   if (!data) notFound();
-  const { period, records } = data;
+  const { period, records, corrections } = data;
   const { duplicateDayCount } = getDuplicateAttendance(records);
   const employees = new Set<string>();
-  const presentEmployees = [...getAttendanceScans(records).values()].filter(days =>
-    [...days.values()].some(({ masuk, keluar }) => masuk && keluar)
-  );
+  const scans = getAttendanceScans(records);
+  const presentEmployees = new Set<string>();
   const recordedDays = new Set<string>();
   for (const record of records) {
     if (record.employeeId) employees.add(record.employeeId);
-    if (record.date) recordedDays.add(record.date);
+    if (!record.date) continue;
+    recordedDays.add(record.date);
+    if (!record.employeeId) continue;
+    const day = scans.get(record.employeeId)?.get(record.date);
+    const correction = corrections[attendanceDayKey(record.employeeId, record.date)];
+    if (correction === undefined ? day?.masuk && day.keluar : correction === 'H') {
+      presentEmployees.add(record.employeeId);
+    }
   }
 
   return (
@@ -45,7 +51,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         </h2>
         <AttendanceSummaryCards
           employeeCount={employees.size}
-          presentEmployeeCount={presentEmployees.length}
+          presentEmployeeCount={presentEmployees.size}
           recordCount={records.length}
           recordedDayCount={recordedDays.size}
           duplicateDayCount={duplicateDayCount}
